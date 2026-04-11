@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pbg-cellpack"
+version = "0.1.0"
+description = "Process-bigraph wrapper for cellPACK mesoscale molecular packing"
+requires-python = ">=3.9"
+license = "MIT"
+dependencies = [
+    "process-bigraph>=0.0.10",
+    "bigraph-schema",
+    "cellpack",
+    "numpy",
+]
+
+[tool.setuptools.packages.find]
+include = ["pbg_cellpack*"]
+
+[project.optional-dependencies]
+dev = ["pytest", "bigraph-viz", "matplotlib"]
