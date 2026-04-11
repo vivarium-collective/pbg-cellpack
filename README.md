@@ -94,20 +94,21 @@ Internally, the Step:
 
 ## Demo
 
-Generate an interactive HTML report showcasing three advanced cellPACK features:
+Generate an interactive HTML report with four canonical cellPACK scenarios:
 
 ```bash
 python demo/demo_report.py
 ```
 
-The three configurations demonstrate:
-1. **Gradient-Biased Packing** — Exponential spatial gradients (X/Y) drive non-uniform molecular placement, mimicking morphogen fields
-2. **Polydisperse Size Distributions** — Continuous (uniform 15-30 nm) and discrete (30/35/40/45/50 nm) radius distributions via `size_options`
-3. **Receptor-Ligand Partner Binding** — `closePartner` mode with 70% binding probability places ligands near receptors
+The four configurations reproduce cellPACK's most well-known models:
+1. **Blood Plasma** — 8 real protein species (serum albumin, IgG, transferrin, fibrinogen, etc.) at physiological ratios, matching the Nature Methods Figure 4
+2. **Synaptic Vesicle Model** — Nested compartments with surface-packed receptors (vATPase, SNAREs) and luminal cargo, matching Figure 5
+3. **Gradient-Biased Organelle Distribution** — Peroxisomes and endosomes placed under exponential spatial gradients, as in the hiPS cell organelle studies
+4. **Receptor-Ligand Assembly** — Priority-based `closePartner` binding with 70% probability, modeling immune synapse formation
 
 The report (`demo/report.html`) includes:
 - Interactive 3D sphere viewers (Three.js InstancedMesh, orbit controls)
-- Feature-specific Plotly charts: spatial position distributions, radius rank plots, ligand-receptor distance histograms, volume fraction pies
+- Feature-specific Plotly charts: ingredient counts, radial distributions, spatial gradient analysis, ligand-receptor distance comparisons, volume fraction pies
 - Colored bigraph-viz architecture diagrams
 - Collapsible PBG composite document trees
 
