@@ -94,15 +94,20 @@ Internally, the Step:
 
 ## Demo
 
-Generate an interactive HTML report with three packing configurations:
+Generate an interactive HTML report showcasing three advanced cellPACK features:
 
 ```bash
 python demo/demo_report.py
 ```
 
-This produces `demo/report.html` with:
-- Interactive 3D sphere viewers (Three.js with InstancedMesh)
-- Ingredient count bar charts, radial distribution histograms, nearest-neighbor distance plots, and volume fraction pie charts (Plotly)
+The three configurations demonstrate:
+1. **Gradient-Biased Packing** — Exponential spatial gradients (X/Y) drive non-uniform molecular placement, mimicking morphogen fields
+2. **Polydisperse Size Distributions** — Continuous (uniform 15-30 nm) and discrete (30/35/40/45/50 nm) radius distributions via `size_options`
+3. **Receptor-Ligand Partner Binding** — `closePartner` mode with 70% binding probability places ligands near receptors
+
+The report (`demo/report.html`) includes:
+- Interactive 3D sphere viewers (Three.js InstancedMesh, orbit controls)
+- Feature-specific Plotly charts: spatial position distributions, radius rank plots, ligand-receptor distance histograms, volume fraction pies
 - Colored bigraph-viz architecture diagrams
 - Collapsible PBG composite document trees
 

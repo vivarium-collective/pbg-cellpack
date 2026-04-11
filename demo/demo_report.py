@@ -1,14 +1,14 @@
 """Demo: cellPACK multi-configuration packing report with 3D viewers.
 
-Runs three distinct molecular packing simulations (crowded cytoplasm,
-multi-size sphere packing, dense small-molecule packing), generates
-interactive 3D sphere viewers with Three.js, Plotly charts, colored
-bigraph-viz architecture diagrams, and navigatable PBG document trees
-— all in a single self-contained HTML.
+Runs three distinct molecular packing simulations showcasing cellPACK's
+advanced features — gradient-biased placement, polydisperse size
+distributions, and receptor-ligand partner binding — with interactive
+3D sphere viewers (Three.js InstancedMesh), Plotly charts, colored
+bigraph-viz architecture diagrams, and navigatable PBG document trees,
+all in a single self-contained HTML.
 """
 
 import json
-import math
 import os
 import base64
 import subprocess
@@ -25,149 +25,204 @@ from pbg_cellpack.composites import make_packing_document
 
 CONFIGS = [
     {
-        'id': 'cytoplasm',
-        'title': 'Crowded Cytoplasm',
-        'subtitle': 'Multi-component molecular crowding in a cellular volume',
+        'id': 'gradient',
+        'title': 'Gradient-Biased Packing',
+        'subtitle': 'Exponential spatial gradients drive non-uniform molecular placement',
         'description': (
-            'Four molecular species of different sizes (large complexes at '
-            'r=40, medium enzymes at r=25, small metabolites at r=15, and tiny '
-            'cofactors at r=8) are packed into a 600³ nm box simulating '
-            'cytoplasmic crowding.  This demonstrates cellPACK\'s ability to '
-            'handle polydisperse mixtures with realistic volume fractions.'
+            'Molecules are placed under the joint influence of two exponential '
+            'gradients along the X and Y axes (70/30 weighting).  The result '
+            'is a concentration hotspot near the low-X / low-Y corner of the '
+            'bounding box, mimicking biological gradients such as morphogen '
+            'fields or chemotactic cues.  A second, larger species is packed '
+            'uniformly for contrast.'
         ),
         'config': {
             'recipe': {
                 'version': '1.0.0',
                 'format_version': '2.0',
-                'name': 'cytoplasm',
-                'bounding_box': [[0, 0, 0], [600, 600, 600]],
+                'name': 'gradient_packing',
+                'bounding_box': [[0, 0, 0], [500, 500, 500]],
+                'gradients': {
+                    'X_gradient': {
+                        'description': 'Exponential decay along X',
+                        'mode': 'X',
+                        'pick_mode': 'rnd',
+                        'weight_mode': 'exponential',
+                        'weight_mode_settings': {'decay_length': 0.1},
+                    },
+                    'Y_gradient': {
+                        'description': 'Exponential decay along Y',
+                        'mode': 'Y',
+                        'pick_mode': 'rnd',
+                        'weight_mode': 'exponential',
+                        'weight_mode_settings': {'decay_length': 0.1},
+                    },
+                },
                 'objects': {
                     'base': {
                         'type': 'single_sphere',
                         'place_method': 'jitter',
-                        'jitter_attempts': 20,
+                        'jitter_attempts': 15,
                         'packing_mode': 'random',
                         'max_jitter': [1, 1, 1],
                     },
-                    'complex': {
+                    'gradient_molecule': {
                         'type': 'single_sphere', 'inherit': 'base',
-                        'color': [0.25, 0.41, 0.88], 'radius': 40,
+                        'color': [0.15, 0.53, 0.87],
+                        'radius': 12,
+                        'packing_mode': 'gradient',
+                        'gradient': ['X_gradient', 'Y_gradient'],
+                        'gradient_weights': [70, 30],
                     },
-                    'enzyme': {
+                    'uniform_scaffold': {
                         'type': 'single_sphere', 'inherit': 'base',
-                        'color': [0.13, 0.73, 0.49], 'radius': 25,
-                    },
-                    'metabolite': {
-                        'type': 'single_sphere', 'inherit': 'base',
-                        'color': [0.96, 0.65, 0.14], 'radius': 15,
-                    },
-                    'cofactor': {
-                        'type': 'single_sphere', 'inherit': 'base',
-                        'color': [0.85, 0.24, 0.31], 'radius': 8,
-                    },
-                },
-                'composition': {
-                    'space': {'regions': {
-                        'interior': ['A', 'B', 'C', 'D'],
-                    }},
-                    'A': {'object': 'complex', 'count': 15},
-                    'B': {'object': 'enzyme', 'count': 40},
-                    'C': {'object': 'metabolite', 'count': 80},
-                    'D': {'object': 'cofactor', 'count': 200},
-                },
-            },
-        },
-        'seed': 42,
-        'camera': [900, 600, 900],
-        'color_scheme': 'indigo',
-    },
-    {
-        'id': 'vesicle',
-        'title': 'Synaptic Vesicle Lumen',
-        'subtitle': 'Uniform neurotransmitter packing in a small volume',
-        'description': (
-            'Hundreds of small neurotransmitter-sized spheres (r=5) are packed '
-            'tightly into a 200³ nm box representing the interior of a '
-            'synaptic vesicle.  A small number of larger transporter proteins '
-            '(r=20) are interspersed.  This showcases cellPACK\'s efficiency '
-            'with large molecule counts and tight packing.'
-        ),
-        'config': {
-            'recipe': {
-                'version': '1.0.0',
-                'format_version': '2.0',
-                'name': 'vesicle',
-                'bounding_box': [[0, 0, 0], [200, 200, 200]],
-                'objects': {
-                    'base': {
-                        'type': 'single_sphere',
-                        'place_method': 'jitter',
-                        'jitter_attempts': 20,
-                        'packing_mode': 'random',
-                        'max_jitter': [1, 1, 1],
-                    },
-                    'transporter': {
-                        'type': 'single_sphere', 'inherit': 'base',
-                        'color': [0.56, 0.27, 0.80], 'radius': 20,
-                    },
-                    'neurotransmitter': {
-                        'type': 'single_sphere', 'inherit': 'base',
-                        'color': [0.20, 0.78, 0.60], 'radius': 5,
+                        'color': [0.85, 0.24, 0.31],
+                        'radius': 30,
                     },
                 },
                 'composition': {
                     'space': {'regions': {
                         'interior': ['A', 'B'],
                     }},
-                    'A': {'object': 'transporter', 'count': 8},
-                    'B': {'object': 'neurotransmitter', 'count': 500},
+                    'A': {'object': 'gradient_molecule', 'count': 400},
+                    'B': {'object': 'uniform_scaffold', 'count': 25},
                 },
             },
         },
-        'seed': 7,
-        'camera': [300, 200, 300],
-        'color_scheme': 'emerald',
+        'seed': 42,
+        'camera': [750, 500, 750],
+        'color_scheme': 'indigo',
     },
     {
-        'id': 'binary',
-        'title': 'Binary Sphere Packing',
-        'subtitle': 'Two-component size-ratio packing study',
+        'id': 'polydisp',
+        'title': 'Polydisperse Size Distributions',
+        'subtitle': 'Continuous and discrete radius distributions in a crowded volume',
         'description': (
-            'A binary mixture of large (r=50) and small (r=15) spheres is '
-            'packed into a 500³ nm box.  The 3.3:1 size ratio allows small '
-            'spheres to fill the interstices between large spheres, a classic '
-            'granular-packing problem.  This configuration is useful for '
-            'studying packing efficiency as a function of size ratio.'
+            'Two molecular populations are packed with variable radii.  '
+            'Population A draws radii from a uniform distribution (15-30 nm), '
+            'modelling the natural size variation in macromolecular complexes.  '
+            'Population B samples from a discrete set of radii '
+            '(30, 35, 40, 45, 50 nm), representing distinct oligomeric '
+            'assemblies.  cellPACK\'s size_options feature generates these '
+            'polydisperse packings in a single pass.'
         ),
         'config': {
             'recipe': {
                 'version': '1.0.0',
                 'format_version': '2.0',
-                'name': 'binary_packing',
+                'name': 'polydisperse',
                 'bounding_box': [[0, 0, 0], [500, 500, 500]],
                 'objects': {
                     'base': {
                         'type': 'single_sphere',
                         'place_method': 'jitter',
-                        'jitter_attempts': 20,
+                        'jitter_attempts': 15,
                         'packing_mode': 'random',
                         'max_jitter': [1, 1, 1],
                     },
-                    'large': {
+                    'continuous_pop': {
                         'type': 'single_sphere', 'inherit': 'base',
-                        'color': [0.96, 0.26, 0.40], 'radius': 50,
+                        'color': [0.56, 0.27, 0.80],
+                        'radius': 25,
                     },
-                    'small': {
+                    'discrete_pop': {
                         'type': 'single_sphere', 'inherit': 'base',
-                        'color': [0.15, 0.53, 0.87], 'radius': 15,
+                        'color': [0.20, 0.78, 0.40],
+                        'radius': 40,
                     },
                 },
                 'composition': {
-                    'space': {'regions': {
-                        'interior': ['A', 'B'],
-                    }},
-                    'A': {'object': 'large', 'count': 25},
-                    'B': {'object': 'small', 'count': 300},
+                    'space': {'regions': {'interior': ['A', 'B']}},
+                    'A': {
+                        'object': 'continuous_pop',
+                        'count': 120,
+                        'size_options': {
+                            'distribution': 'uniform',
+                            'min': 15,
+                            'max': 30,
+                        },
+                    },
+                    'B': {
+                        'object': 'discrete_pop',
+                        'count': 60,
+                        'size_options': {
+                            'distribution': 'list',
+                            'list_values': [30, 35, 40, 45, 50],
+                        },
+                    },
+                },
+            },
+        },
+        'seed': 7,
+        'camera': [750, 500, 750],
+        'color_scheme': 'emerald',
+    },
+    {
+        'id': 'partner',
+        'title': 'Receptor-Ligand Partner Binding',
+        'subtitle': 'Proximity-biased packing with stochastic binding probability',
+        'description': (
+            'Receptor molecules (blue, r=25 nm) are placed first with high '
+            'priority.  Ligand molecules (orange, r=12 nm) then pack using '
+            'cellPACK\'s closePartner mode with a 70% binding probability, '
+            'preferentially placing each ligand near an existing receptor.  '
+            'A background population of small inert molecules fills the '
+            'remaining volume.  This models multivalent binding, immune '
+            'synapse formation, and other proximity-driven assembly.'
+        ),
+        'config': {
+            'recipe': {
+                'version': '1.1',
+                'format_version': '2.1',
+                'name': 'receptor_ligand',
+                'bounding_box': [[0, 0, 0], [500, 500, 500]],
+                'objects': {
+                    'receptor': {
+                        'color': [0.11, 0.47, 0.69],
+                        'jitter_attempts': 20,
+                        'rotation_range': 6.2831,
+                        'max_jitter': [1, 1, 1],
+                        'packing_mode': 'random',
+                        'type': 'single_sphere',
+                        'rejection_threshold': 200,
+                        'place_method': 'jitter',
+                        'radius': 25,
+                    },
+                    'ligand': {
+                        'color': [1.0, 0.41, 0.0],
+                        'jitter_attempts': 20,
+                        'partners': [
+                            {'name': 'receptor', 'binding_probability': 0.7},
+                        ],
+                        'rotation_range': 6.2831,
+                        'max_jitter': [1, 1, 1],
+                        'packing_mode': 'closePartner',
+                        'type': 'single_sphere',
+                        'rejection_threshold': 500,
+                        'place_method': 'jitter',
+                        'radius': 12,
+                    },
+                    'inert': {
+                        'color': [0.70, 0.70, 0.70],
+                        'jitter_attempts': 10,
+                        'rotation_range': 6.2831,
+                        'max_jitter': [1, 1, 1],
+                        'packing_mode': 'random',
+                        'type': 'single_sphere',
+                        'place_method': 'jitter',
+                        'radius': 8,
+                    },
+                },
+                'composition': {
+                    'space': {
+                        'regions': {
+                            'interior': [
+                                {'object': 'receptor', 'count': 40, 'priority': -1},
+                                {'object': 'ligand', 'count': 100, 'priority': 0},
+                                {'object': 'inert', 'count': 200, 'priority': 1},
+                            ],
+                        },
+                    },
                 },
             },
         },
@@ -195,46 +250,49 @@ def run_simulation(cfg_entry):
 
 # ── Analysis helpers ────────────────────────────────────────────────
 
-def compute_ingredient_counts(result):
-    """Return {ingredient_name: count} dict."""
+def ingredient_counts(result):
     counts = {}
     for name in result['ingredient_names']:
         counts[name] = counts.get(name, 0) + 1
     return counts
 
 
-def compute_nearest_neighbor_distances(positions):
-    """Compute nearest-neighbor distance for each packed sphere."""
+def nearest_neighbor_dists(positions):
     pts = np.array(positions)
     n = len(pts)
     if n < 2:
         return []
-    nn_dists = []
+    nn = []
     for i in range(n):
-        diffs = pts - pts[i]
-        dists = np.sqrt(np.sum(diffs ** 2, axis=1))
-        dists[i] = np.inf
-        nn_dists.append(float(np.min(dists)))
-    return nn_dists
+        d = np.sqrt(np.sum((pts - pts[i]) ** 2, axis=1))
+        d[i] = np.inf
+        nn.append(float(np.min(d)))
+    return nn
 
 
-def compute_radial_distribution(positions, bb):
-    """Compute distance of each sphere from box center."""
+def axis_positions(positions, axis):
+    return [float(p[axis]) for p in positions]
+
+
+def cross_species_dists(positions, names, species_a, species_b):
+    """Min distance from each species_b molecule to its nearest species_a."""
     pts = np.array(positions)
-    center = np.array([(bb[0][i] + bb[1][i]) / 2 for i in range(3)])
-    dists = np.sqrt(np.sum((pts - center) ** 2, axis=1))
-    return [float(d) for d in dists]
+    idx_a = [i for i, n in enumerate(names) if species_a in n]
+    idx_b = [i for i, n in enumerate(names) if species_b in n]
+    if not idx_a or not idx_b:
+        return []
+    pa = pts[idx_a]
+    dists = []
+    for i in idx_b:
+        d = np.sqrt(np.sum((pa - pts[i]) ** 2, axis=1))
+        dists.append(float(np.min(d)))
+    return dists
 
 
 # ── Bigraph diagram ────────────────────────────────────────────────
 
 def generate_bigraph_image(cfg_entry):
-    """Generate a colored bigraph-viz PNG for the composite document."""
     from bigraph_viz import plot_bigraph
-
-    recipe = cfg_entry['config']['recipe']
-    ingredient_names = list(recipe['objects'].keys())
-    ingredient_names = [n for n in ingredient_names if n != 'base']
 
     doc = {
         'packer': {
@@ -274,24 +332,17 @@ def generate_bigraph_image(cfg_entry):
 
     outdir = tempfile.mkdtemp()
     plot_bigraph(
-        state=doc,
-        out_dir=outdir,
-        filename='bigraph',
-        file_format='png',
-        remove_process_place_edges=True,
-        rankdir='LR',
-        node_fill_colors=node_colors,
-        node_label_size='16pt',
-        port_labels=False,
-        dpi='150',
+        state=doc, out_dir=outdir, filename='bigraph',
+        file_format='png', remove_process_place_edges=True,
+        rankdir='LR', node_fill_colors=node_colors,
+        node_label_size='16pt', port_labels=False, dpi='150',
     )
-    png_path = os.path.join(outdir, 'bigraph.png')
-    with open(png_path, 'rb') as f:
+    with open(os.path.join(outdir, 'bigraph.png'), 'rb') as f:
         b64 = base64.b64encode(f.read()).decode()
     return f'data:image/png;base64,{b64}'
 
 
-# ── HTML Report ─────────────────────────────────────────────────────
+# ── HTML generation ─────────────────────────────────────────────────
 
 COLOR_SCHEMES = {
     'indigo': {'primary': '#6366f1', 'light': '#e0e7ff', 'dark': '#4338ca',
@@ -303,9 +354,25 @@ COLOR_SCHEMES = {
 }
 
 
-def generate_html(sim_results, output_path):
-    """Generate comprehensive self-contained HTML report."""
+def _feature_charts_html(sid):
+    """Return the 4-chart grid HTML for a given section id.
 
+    Chart IDs:
+      chart-a-{sid}  top-left     (ingredient counts for all; X-pos for gradient)
+      chart-b-{sid}  top-right    (feature-specific)
+      chart-c-{sid}  bottom-left  (nearest-neighbor distance)
+      chart-d-{sid}  bottom-right (volume fractions)
+    """
+    return f"""
+      <div class="charts-row">
+        <div class="chart-box"><div id="chart-a-{sid}" class="chart"></div></div>
+        <div class="chart-box"><div id="chart-b-{sid}" class="chart"></div></div>
+        <div class="chart-box"><div id="chart-c-{sid}" class="chart"></div></div>
+        <div class="chart-box"><div id="chart-d-{sid}" class="chart"></div></div>
+      </div>"""
+
+
+def generate_html(sim_results, output_path):
     sections_html = []
     all_js_data = {}
     pbg_docs = {}
@@ -318,10 +385,9 @@ def generate_html(sim_results, output_path):
 
         n_packed = result['n_packed']
         pf = result['packing_fraction']
+        ic = ingredient_counts(result)
 
-        # Ingredient breakdown
-        ingr_counts = compute_ingredient_counts(result)
-        # Get unique ingredient info (name -> color, radius)
+        # ingredient metadata
         ingr_info = {}
         for i, name in enumerate(result['ingredient_names']):
             if name not in ingr_info:
@@ -330,11 +396,37 @@ def generate_html(sim_results, output_path):
                     'radius': result['radii'][i],
                 }
 
-        # Analysis data
-        nn_dists = compute_nearest_neighbor_distances(result['positions'])
-        radial_dists = compute_radial_distribution(result['positions'], bb)
+        nn = nearest_neighbor_dists(result['positions'])
 
-        # JS data for Three.js viewer
+        # Feature-specific analysis data
+        extra = {}
+        if sid == 'gradient':
+            extra['x_pos'] = axis_positions(result['positions'], 0)
+            extra['y_pos'] = axis_positions(result['positions'], 1)
+            extra['z_pos'] = axis_positions(result['positions'], 2)
+            # Per-species axis data
+            extra['grad_x'] = [result['positions'][i][0]
+                               for i, n in enumerate(result['ingredient_names'])
+                               if 'gradient' in n]
+            extra['scaffold_x'] = [result['positions'][i][0]
+                                   for i, n in enumerate(result['ingredient_names'])
+                                   if 'scaffold' in n]
+        elif sid == 'polydisp':
+            extra['all_radii'] = result['radii']
+            extra['cont_radii'] = [result['radii'][i]
+                                   for i, n in enumerate(result['ingredient_names'])
+                                   if 'continuous' in n]
+            extra['disc_radii'] = [result['radii'][i]
+                                   for i, n in enumerate(result['ingredient_names'])
+                                   if 'discrete' in n]
+        elif sid == 'partner':
+            extra['lig_rec_dists'] = cross_species_dists(
+                result['positions'], result['ingredient_names'],
+                'receptor', 'ligand')
+            extra['lig_inert_dists'] = cross_species_dists(
+                result['positions'], result['ingredient_names'],
+                'receptor', 'inert')
+
         all_js_data[sid] = {
             'positions': result['positions'],
             'radii': result['radii'],
@@ -342,33 +434,35 @@ def generate_html(sim_results, output_path):
             'names': result['ingredient_names'],
             'bb': bb,
             'camera': cfg['camera'],
-            'ingr_counts': ingr_counts,
+            'ingr_counts': ic,
             'ingr_info': {k: {'color': v['color'], 'radius': v['radius']}
                           for k, v in ingr_info.items()},
-            'nn_dists': nn_dists,
-            'radial_dists': radial_dists,
+            'nn': nn,
+            'extra': extra,
         }
 
-        # Bigraph diagram
         print(f'  Generating bigraph diagram for {sid}...')
         bigraph_img = generate_bigraph_image(cfg)
 
-        # PBG document
         pbg_docs[sid] = make_packing_document(
-            recipe=recipe,
-            place_method='jitter',
-            seed=cfg['seed'],
-        )
+            recipe=recipe, place_method='jitter', seed=cfg['seed'])
 
-        # Volume stats
         bb_vol = np.prod(np.array(bb[1]) - np.array(bb[0]))
         bb_size = [bb[1][i] - bb[0][i] for i in range(3)]
 
-        # Ingredient count summary
+        # Feature badge
+        if sid == 'gradient':
+            feature_tag = 'gradient mode &middot; exponential decay'
+        elif sid == 'polydisp':
+            radii_arr = np.array(result['radii'])
+            feature_tag = (f'size_options &middot; {len(np.unique(radii_arr))} '
+                           f'unique radii ({radii_arr.min():.0f}-{radii_arr.max():.0f} nm)')
+        else:
+            feature_tag = 'closePartner mode &middot; 70% binding probability'
+
         ingr_summary = ' &middot; '.join(
             f'{name}: <strong>{count}</strong>'
-            for name, count in sorted(ingr_counts.items())
-        )
+            for name, count in sorted(ic.items()))
 
         section = f"""
     <div class="sim-section" id="sim-{sid}">
@@ -380,10 +474,11 @@ def generate_html(sim_results, output_path):
         </div>
       </div>
       <p class="sim-description">{cfg['description']}</p>
+      <div class="feature-tag" style="border-color:{cs['accent']}; color:{cs['dark']}; background:{cs['light']};">{feature_tag}</div>
 
       <div class="metrics-row">
         <div class="metric"><span class="metric-label">Packed</span><span class="metric-value">{n_packed:,}</span></div>
-        <div class="metric"><span class="metric-label">Species</span><span class="metric-value">{len(ingr_counts)}</span></div>
+        <div class="metric"><span class="metric-label">Species</span><span class="metric-value">{len(ic)}</span></div>
         <div class="metric"><span class="metric-label">Packing &phi;</span><span class="metric-value">{pf:.3f}</span></div>
         <div class="metric"><span class="metric-label">Box</span><span class="metric-value">{bb_size[0]:.0f}&sup3;</span><span class="metric-sub">nm</span></div>
         <div class="metric"><span class="metric-label">Box Vol</span><span class="metric-value">{bb_vol:.0e}</span><span class="metric-sub">nm&sup3;</span></div>
@@ -396,19 +491,14 @@ def generate_html(sim_results, output_path):
         <canvas id="canvas-{sid}" class="mesh-canvas"></canvas>
         <div class="viewer-info">
           <strong>{n_packed}</strong> molecules &middot;
-          <strong>{len(ingr_counts)}</strong> species<br>
+          <strong>{len(ic)}</strong> species<br>
           Drag to rotate &middot; Scroll to zoom
         </div>
         <div class="legend-box" id="legend-{sid}"></div>
       </div>
 
       <h3 class="subsection-title">Packing Analysis</h3>
-      <div class="charts-row">
-        <div class="chart-box"><div id="chart-counts-{sid}" class="chart"></div></div>
-        <div class="chart-box"><div id="chart-radial-{sid}" class="chart"></div></div>
-        <div class="chart-box"><div id="chart-nn-{sid}" class="chart"></div></div>
-        <div class="chart-box"><div id="chart-volume-{sid}" class="chart"></div></div>
-      </div>
+      {_feature_charts_html(sid)}
 
       <div class="pbg-row">
         <div class="pbg-col">
@@ -426,7 +516,6 @@ def generate_html(sim_results, output_path):
 """
         sections_html.append(section)
 
-    # Navigation
     nav_items = ''.join(
         f'<a href="#sim-{c["id"]}" class="nav-link" '
         f'style="border-color:{COLOR_SCHEMES[c["color_scheme"]]["primary"]};">'
@@ -451,7 +540,7 @@ body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-seri
   border-bottom:1px solid #e2e8f0; padding:3rem;
 }}
 .page-header h1 {{ font-size:2.2rem; font-weight:800; color:#0f172a; margin-bottom:.3rem; }}
-.page-header p {{ color:#64748b; font-size:.95rem; max-width:700px; }}
+.page-header p {{ color:#64748b; font-size:.95rem; max-width:720px; }}
 .nav {{ display:flex; gap:.8rem; padding:1rem 3rem; background:#f8fafc;
         border-bottom:1px solid #e2e8f0; position:sticky; top:0; z-index:100; }}
 .nav-link {{ padding:.4rem 1rem; border-radius:8px; border:1.5px solid;
@@ -465,7 +554,9 @@ body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-seri
                align-items:center; justify-content:center; font-weight:800; font-size:1.1rem; }}
 .sim-title {{ font-size:1.5rem; font-weight:700; color:#0f172a; }}
 .sim-subtitle {{ font-size:.9rem; color:#64748b; }}
-.sim-description {{ color:#475569; font-size:.9rem; margin-bottom:1.5rem; max-width:800px; }}
+.sim-description {{ color:#475569; font-size:.9rem; margin-bottom:.8rem; max-width:800px; }}
+.feature-tag {{ display:inline-block; font-size:.78rem; font-weight:600; padding:.3rem .8rem;
+                border:1.5px solid; border-radius:6px; margin-bottom:1.2rem; }}
 .ingr-summary {{ font-size:.85rem; color:#64748b; margin-bottom:1rem; }}
 .subsection-title {{ font-size:1.05rem; font-weight:600; color:#334155;
                      margin:1.5rem 0 .8rem; }}
@@ -523,8 +614,8 @@ body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-seri
 <div class="page-header">
   <h1>cellPACK Molecular Packing Report</h1>
   <p>Three mesoscale packing simulations wrapped as <strong>process-bigraph</strong>
-  Steps using cellPACK. Each configuration demonstrates a distinct packing
-  scenario with interactive 3D visualization and statistical analysis.</p>
+  Steps, showcasing cellPACK's advanced features: gradient-biased placement,
+  polydisperse size distributions, and receptor-ligand partner binding.</p>
 </div>
 
 <div class="nav">{nav_items}</div>
@@ -612,7 +703,7 @@ Object.keys(DATA).forEach(sid => {{
     const count = d.ingr_counts[name] || 0;
     html += '<div class="legend-item">' +
       '<span class="legend-dot" style="background:rgb('+r+','+g+','+b+')"></span>' +
-      '<span>' + name + ' (r=' + info.radius + ') &times; ' + count + '</span></div>';
+      '<span>' + name + ' (r=' + info.radius.toFixed(0) + ') &times; ' + count + '</span></div>';
   }});
   el.innerHTML = html;
 }});
@@ -643,7 +734,6 @@ Object.keys(DATA).forEach(sid => {{
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.6;
 
-  // Center the camera target on the bounding box center
   const bbCenter = [
     (d.bb[0][0] + d.bb[1][0]) / 2,
     (d.bb[0][1] + d.bb[1][1]) / 2,
@@ -658,152 +748,237 @@ Object.keys(DATA).forEach(sid => {{
   dl2.position.set(-300, -200, -400); scene.add(dl2);
 
   // Bounding box wireframe
-  const bbSize = [d.bb[1][0]-d.bb[0][0], d.bb[1][1]-d.bb[0][1], d.bb[1][2]-d.bb[0][2]];
-  const boxGeom = new THREE.BoxGeometry(...bbSize);
-  const boxEdges = new THREE.EdgesGeometry(boxGeom);
+  const bbSz = [d.bb[1][0]-d.bb[0][0], d.bb[1][1]-d.bb[0][1], d.bb[1][2]-d.bb[0][2]];
+  const boxEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(...bbSz));
   const boxLine = new THREE.LineSegments(boxEdges,
     new THREE.LineBasicMaterial({{color:0x94a3b8, transparent:true, opacity:0.4}}));
   boxLine.position.set(...bbCenter);
   scene.add(boxLine);
 
-  // Render spheres using InstancedMesh for performance
-  // Group by radius for efficiency
+  // Group spheres by unique radius for efficient instanced rendering
   const byRadius = {{}};
   for (let i = 0; i < d.positions.length; i++) {{
-    const r = d.radii[i];
+    const r = d.radii[i].toFixed(2);
     if (!byRadius[r]) byRadius[r] = [];
     byRadius[r].push(i);
   }}
 
+  const dummy = new THREE.Object3D();
+  const tmpColor = new THREE.Color();
   Object.keys(byRadius).forEach(rKey => {{
     const r = parseFloat(rKey);
     const indices = byRadius[rKey];
-    const sphereGeom = new THREE.SphereGeometry(r, 16, 12);
-    const mat = new THREE.MeshPhongMaterial({{
-      vertexColors: false,
-      shininess: 60,
-      specular: 0x333333,
-    }});
-    const instMesh = new THREE.InstancedMesh(sphereGeom, mat, indices.length);
-
-    const dummy = new THREE.Object3D();
-    const color = new THREE.Color();
+    const geom = new THREE.SphereGeometry(r, 16, 12);
+    const mat = new THREE.MeshPhongMaterial({{ shininess:60, specular:0x444444 }});
+    const im = new THREE.InstancedMesh(geom, mat, indices.length);
     for (let j = 0; j < indices.length; j++) {{
       const idx = indices[j];
-      const pos = d.positions[idx];
-      dummy.position.set(pos[0], pos[1], pos[2]);
+      dummy.position.set(d.positions[idx][0], d.positions[idx][1], d.positions[idx][2]);
       dummy.updateMatrix();
-      instMesh.setMatrixAt(j, dummy.matrix);
+      im.setMatrixAt(j, dummy.matrix);
       const c = d.colors[idx];
-      color.setRGB(c[0], c[1], c[2]);
-      instMesh.setColorAt(j, color);
+      tmpColor.setRGB(c[0], c[1], c[2]);
+      im.setColorAt(j, tmpColor);
     }}
-    instMesh.instanceMatrix.needsUpdate = true;
-    instMesh.instanceColor.needsUpdate = true;
-    instMesh.material.vertexColors = false;
-    // Enable per-instance colors
-    instMesh.material = new THREE.MeshPhongMaterial({{
-      shininess: 60, specular: 0x333333,
-    }});
-    // Re-set colors with correct material
-    instMesh.material.dispose();
-    const mat2 = new THREE.MeshPhongMaterial({{ shininess:60, specular:0x444444 }});
-    const instMesh2 = new THREE.InstancedMesh(sphereGeom, mat2, indices.length);
-    for (let j = 0; j < indices.length; j++) {{
-      const idx = indices[j];
-      const pos = d.positions[idx];
-      dummy.position.set(pos[0], pos[1], pos[2]);
-      dummy.updateMatrix();
-      instMesh2.setMatrixAt(j, dummy.matrix);
-      const c = d.colors[idx];
-      color.setRGB(c[0], c[1], c[2]);
-      instMesh2.setColorAt(j, color);
-    }}
-    instMesh2.instanceMatrix.needsUpdate = true;
-    if (instMesh2.instanceColor) instMesh2.instanceColor.needsUpdate = true;
-    scene.add(instMesh2);
+    im.instanceMatrix.needsUpdate = true;
+    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    scene.add(im);
   }});
 
-  function animate() {{
+  (function animate() {{
     requestAnimationFrame(animate);
     controls.update();
     renderer.render(scene, cam);
-  }}
-  animate();
+  }})();
 }});
 
 // ─── Plotly Charts ───
 const pLayout = {{
   paper_bgcolor:'#f8fafc', plot_bgcolor:'#f8fafc',
   font:{{ color:'#64748b', family:'-apple-system,sans-serif', size:11 }},
-  margin:{{ l:50, r:15, t:35, b:40 }},
+  margin:{{ l:55, r:15, t:35, b:45 }},
   xaxis:{{ gridcolor:'#e2e8f0', zerolinecolor:'#e2e8f0' }},
   yaxis:{{ gridcolor:'#e2e8f0', zerolinecolor:'#e2e8f0' }},
 }};
 const pCfg = {{ responsive:true, displayModeBar:false }};
 
-Object.keys(DATA).forEach(sid => {{
+// ─ Gradient section charts ─
+(function() {{
+  const sid = 'gradient';
   const d = DATA[sid];
+  if (!d) return;
+  const ex = d.extra;
 
-  // 1. Ingredient Counts (bar chart)
-  const names = Object.keys(d.ingr_counts);
-  const counts = names.map(n => d.ingr_counts[n]);
-  const barColors = names.map(n => {{
-    const c = d.ingr_info[n].color;
-    return 'rgb(' + Math.round(c[0]*255) + ',' + Math.round(c[1]*255) + ',' + Math.round(c[2]*255) + ')';
-  }});
-  Plotly.newPlot('chart-counts-'+sid, [{{
-    x: names, y: counts, type: 'bar',
-    marker: {{ color: barColors, line: {{ color:'rgba(0,0,0,0.1)', width:1 }} }},
-    text: counts, textposition: 'auto',
-  }}], {{...pLayout,
-    title:{{ text:'Ingredient Counts', font:{{ size:12, color:'#334155' }} }},
+  // A: X-position by species (overlapping histograms)
+  Plotly.newPlot('chart-a-'+sid, [
+    {{ x:ex.grad_x, type:'histogram', nbinsx:30, name:'gradient mol.',
+       marker:{{ color:'rgba(38,136,222,0.55)', line:{{ width:0.5, color:'#1e6fc2' }} }}, opacity:0.7 }},
+    {{ x:ex.scaffold_x, type:'histogram', nbinsx:15, name:'uniform scaffold',
+       marker:{{ color:'rgba(217,61,79,0.55)', line:{{ width:0.5, color:'#b31d35' }} }}, opacity:0.7 }},
+  ], {{...pLayout, barmode:'overlay',
+    title:{{ text:'X-Position Distribution', font:{{ size:12, color:'#334155' }} }},
+    xaxis:{{...pLayout.xaxis, title:{{ text:'X (nm)', font:{{ size:10 }} }} }},
+    yaxis:{{...pLayout.yaxis, title:{{ text:'Count', font:{{ size:10 }} }} }},
+    legend:{{ font:{{ size:9 }}, bgcolor:'rgba(0,0,0,0)', x:0.55, y:0.95 }},
+  }}, pCfg);
+
+  // B: Y-position histogram
+  Plotly.newPlot('chart-b-'+sid, [
+    {{ x:ex.y_pos, type:'histogram', nbinsx:30,
+       marker:{{ color:'#818cf8', line:{{ width:0.5, color:'#4338ca' }} }} }},
+  ], {{...pLayout,
+    title:{{ text:'Y-Position Distribution', font:{{ size:12, color:'#334155' }} }},
+    xaxis:{{...pLayout.xaxis, title:{{ text:'Y (nm)', font:{{ size:10 }} }} }},
     yaxis:{{...pLayout.yaxis, title:{{ text:'Count', font:{{ size:10 }} }} }},
   }}, pCfg);
 
-  // 2. Radial Distribution (histogram)
-  Plotly.newPlot('chart-radial-'+sid, [{{
-    x: d.radial_dists, type: 'histogram',
-    nbinsx: 25,
-    marker: {{ color:'#6366f1', line: {{ color:'#4338ca', width:0.5 }} }},
-  }}], {{...pLayout,
-    title:{{ text:'Distance from Center', font:{{ size:12, color:'#334155' }} }},
-    xaxis:{{...pLayout.xaxis, title:{{ text:'Distance (nm)', font:{{ size:10 }} }} }},
-    yaxis:{{...pLayout.yaxis, title:{{ text:'Count', font:{{ size:10 }} }} }},
-  }}, pCfg);
-
-  // 3. Nearest Neighbor Distances (histogram)
-  Plotly.newPlot('chart-nn-'+sid, [{{
-    x: d.nn_dists, type: 'histogram',
-    nbinsx: 25,
-    marker: {{ color:'#10b981', line: {{ color:'#059669', width:0.5 }} }},
-  }}], {{...pLayout,
+  // C: nearest-neighbor
+  Plotly.newPlot('chart-c-'+sid, [
+    {{ x:d.nn, type:'histogram', nbinsx:25,
+       marker:{{ color:'#10b981', line:{{ width:0.5, color:'#059669' }} }} }},
+  ], {{...pLayout,
     title:{{ text:'Nearest Neighbor Distance', font:{{ size:12, color:'#334155' }} }},
     xaxis:{{...pLayout.xaxis, title:{{ text:'Distance (nm)', font:{{ size:10 }} }} }},
     yaxis:{{...pLayout.yaxis, title:{{ text:'Count', font:{{ size:10 }} }} }},
   }}, pCfg);
 
-  // 4. Volume Fractions (pie chart)
-  const volNames = names.slice();
-  const vols = volNames.map(n => {{
+  // D: ingredient counts bar
+  const names = Object.keys(d.ingr_counts);
+  const vals = names.map(n => d.ingr_counts[n]);
+  const barC = names.map(n => {{
+    const c = d.ingr_info[n].color;
+    return 'rgb('+Math.round(c[0]*255)+','+Math.round(c[1]*255)+','+Math.round(c[2]*255)+')';
+  }});
+  Plotly.newPlot('chart-d-'+sid, [{{
+    x:names, y:vals, type:'bar', marker:{{ color:barC }}, text:vals, textposition:'auto',
+  }}], {{...pLayout,
+    title:{{ text:'Ingredient Counts', font:{{ size:12, color:'#334155' }} }},
+    yaxis:{{...pLayout.yaxis, title:{{ text:'Count', font:{{ size:10 }} }} }},
+  }}, pCfg);
+}})();
+
+// ─ Polydisperse section charts ─
+(function() {{
+  const sid = 'polydisp';
+  const d = DATA[sid];
+  if (!d) return;
+  const ex = d.extra;
+
+  // A: full radius distribution (overlapping)
+  Plotly.newPlot('chart-a-'+sid, [
+    {{ x:ex.cont_radii, type:'histogram', nbinsx:20, name:'Uniform (15-30)',
+       marker:{{ color:'rgba(143,69,204,0.6)', line:{{ width:0.5, color:'#7c3aed' }} }}, opacity:0.7 }},
+    {{ x:ex.disc_radii, type:'histogram', nbinsx:12, name:'Discrete (30-50)',
+       marker:{{ color:'rgba(51,199,102,0.6)', line:{{ width:0.5, color:'#059669' }} }}, opacity:0.7 }},
+  ], {{...pLayout, barmode:'overlay',
+    title:{{ text:'Radius Distribution by Population', font:{{ size:12, color:'#334155' }} }},
+    xaxis:{{...pLayout.xaxis, title:{{ text:'Radius (nm)', font:{{ size:10 }} }} }},
+    yaxis:{{...pLayout.yaxis, title:{{ text:'Count', font:{{ size:10 }} }} }},
+    legend:{{ font:{{ size:9 }}, bgcolor:'rgba(0,0,0,0)', x:0.55, y:0.95 }},
+  }}, pCfg);
+
+  // B: all radii sorted (rank plot)
+  const sorted = ex.all_radii.slice().sort((a,b)=>a-b);
+  Plotly.newPlot('chart-b-'+sid, [{{
+    y:sorted, type:'scatter', mode:'markers',
+    marker:{{ size:4, color:sorted, colorscale:'Viridis', showscale:true,
+              colorbar:{{ title:{{ text:'r (nm)', font:{{ size:9 }} }}, thickness:12, len:0.7 }} }},
+  }}], {{...pLayout,
+    title:{{ text:'Sorted Radius Rank Plot', font:{{ size:12, color:'#334155' }} }},
+    xaxis:{{...pLayout.xaxis, title:{{ text:'Rank', font:{{ size:10 }} }} }},
+    yaxis:{{...pLayout.yaxis, title:{{ text:'Radius (nm)', font:{{ size:10 }} }} }},
+  }}, pCfg);
+
+  // C: nearest-neighbor
+  Plotly.newPlot('chart-c-'+sid, [
+    {{ x:d.nn, type:'histogram', nbinsx:25,
+       marker:{{ color:'#10b981', line:{{ width:0.5, color:'#059669' }} }} }},
+  ], {{...pLayout,
+    title:{{ text:'Nearest Neighbor Distance', font:{{ size:12, color:'#334155' }} }},
+    xaxis:{{...pLayout.xaxis, title:{{ text:'Distance (nm)', font:{{ size:10 }} }} }},
+    yaxis:{{...pLayout.yaxis, title:{{ text:'Count', font:{{ size:10 }} }} }},
+  }}, pCfg);
+
+  // D: volume fractions pie
+  const names = Object.keys(d.ingr_counts);
+  const vols = names.map(n => {{
     const r = d.ingr_info[n].radius;
     return d.ingr_counts[n] * (4/3) * Math.PI * r*r*r;
   }});
-  const pieColors = volNames.map(n => {{
+  const pieC = names.map(n => {{
     const c = d.ingr_info[n].color;
-    return 'rgb(' + Math.round(c[0]*255) + ',' + Math.round(c[1]*255) + ',' + Math.round(c[2]*255) + ')';
+    return 'rgb('+Math.round(c[0]*255)+','+Math.round(c[1]*255)+','+Math.round(c[2]*255)+')';
   }});
-  Plotly.newPlot('chart-volume-'+sid, [{{
-    labels: volNames, values: vols, type: 'pie',
-    marker: {{ colors: pieColors }},
-    textinfo: 'label+percent',
-    hole: 0.35,
+  Plotly.newPlot('chart-d-'+sid, [{{
+    labels:names, values:vols, type:'pie', marker:{{ colors:pieC }},
+    textinfo:'label+percent', hole:0.35,
   }}], {{...pLayout,
     title:{{ text:'Volume by Ingredient', font:{{ size:12, color:'#334155' }} }},
-    showlegend: false,
-    margin:{{ l:20, r:20, t:40, b:20 }},
+    showlegend:false, margin:{{ l:20, r:20, t:40, b:20 }},
   }}, pCfg);
-}});
+}})();
+
+// ─ Partner section charts ─
+(function() {{
+  const sid = 'partner';
+  const d = DATA[sid];
+  if (!d) return;
+  const ex = d.extra;
+
+  // A: ligand-to-receptor distance vs inert-to-receptor distance
+  Plotly.newPlot('chart-a-'+sid, [
+    {{ x:ex.lig_rec_dists, type:'histogram', nbinsx:25, name:'Ligand &rarr; nearest Receptor',
+       marker:{{ color:'rgba(255,105,0,0.6)', line:{{ width:0.5, color:'#c65000' }} }}, opacity:0.7 }},
+    {{ x:ex.lig_inert_dists, type:'histogram', nbinsx:25, name:'Inert &rarr; nearest Receptor',
+       marker:{{ color:'rgba(160,160,160,0.5)', line:{{ width:0.5, color:'#777' }} }}, opacity:0.6 }},
+  ], {{...pLayout, barmode:'overlay',
+    title:{{ text:'Distance to Nearest Receptor', font:{{ size:12, color:'#334155' }} }},
+    xaxis:{{...pLayout.xaxis, title:{{ text:'Distance (nm)', font:{{ size:10 }} }} }},
+    yaxis:{{...pLayout.yaxis, title:{{ text:'Count', font:{{ size:10 }} }} }},
+    legend:{{ font:{{ size:9 }}, bgcolor:'rgba(0,0,0,0)', x:0.35, y:0.95 }},
+  }}, pCfg);
+
+  // B: ingredient counts bar
+  const names = Object.keys(d.ingr_counts);
+  const vals = names.map(n => d.ingr_counts[n]);
+  const barC = names.map(n => {{
+    const c = d.ingr_info[n].color;
+    return 'rgb('+Math.round(c[0]*255)+','+Math.round(c[1]*255)+','+Math.round(c[2]*255)+')';
+  }});
+  Plotly.newPlot('chart-b-'+sid, [{{
+    x:names, y:vals, type:'bar', marker:{{ color:barC }}, text:vals, textposition:'auto',
+  }}], {{...pLayout,
+    title:{{ text:'Ingredient Counts', font:{{ size:12, color:'#334155' }} }},
+    yaxis:{{...pLayout.yaxis, title:{{ text:'Count', font:{{ size:10 }} }} }},
+  }}, pCfg);
+
+  // C: nearest-neighbor
+  Plotly.newPlot('chart-c-'+sid, [
+    {{ x:d.nn, type:'histogram', nbinsx:25,
+       marker:{{ color:'#10b981', line:{{ width:0.5, color:'#059669' }} }} }},
+  ], {{...pLayout,
+    title:{{ text:'Nearest Neighbor Distance', font:{{ size:12, color:'#334155' }} }},
+    xaxis:{{...pLayout.xaxis, title:{{ text:'Distance (nm)', font:{{ size:10 }} }} }},
+    yaxis:{{...pLayout.yaxis, title:{{ text:'Count', font:{{ size:10 }} }} }},
+  }}, pCfg);
+
+  // D: volume fractions
+  const vols = names.map(n => {{
+    const r = d.ingr_info[n].radius;
+    return d.ingr_counts[n] * (4/3) * Math.PI * r*r*r;
+  }});
+  const pieC = names.map(n => {{
+    const c = d.ingr_info[n].color;
+    return 'rgb('+Math.round(c[0]*255)+','+Math.round(c[1]*255)+','+Math.round(c[2]*255)+')';
+  }});
+  Plotly.newPlot('chart-d-'+sid, [{{
+    labels:names, values:vols, type:'pie', marker:{{ colors:pieC }},
+    textinfo:'label+percent', hole:0.35,
+  }}], {{...pLayout,
+    title:{{ text:'Volume by Ingredient', font:{{ size:12, color:'#334155' }} }},
+    showlegend:false, margin:{{ l:20, r:20, t:40, b:20 }},
+  }}, pCfg);
+}})();
 
 </script>
 </body>
@@ -827,8 +1002,6 @@ def run_demo():
 
     print('Generating HTML report...')
     generate_html(sim_results, output_path)
-
-    # Open in Safari
     subprocess.run(['open', '-a', 'Safari', output_path])
 
 
