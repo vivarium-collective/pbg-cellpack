@@ -1,15 +1,18 @@
 """Demo: cellPACK canonical packing scenarios with 3D viewers.
 
-Four biologically-motivated packing simulations showcasing cellPACK's
+Five biologically-motivated packing simulations showcasing cellPACK's
 core capabilities:
   1. Blood Plasma — 8 real protein species at physiological concentrations
   2. Vesicle with Surface & Interior Packing — nested compartments
   3. Gradient-Biased Organelle Distribution — spatial gradients
   4. Receptor-Ligand Assembly — partner binding with priority packing
+  5. Membrane-Biased Peroxisomes — radial gradient biasing toward cortex
 
 Generates an interactive self-contained HTML report with Three.js 3D
 viewers (InstancedMesh), Plotly charts, bigraph-viz diagrams, and PBG
-document trees.
+document trees.  Large container ingredients (vesicle shells, dense
+cores) and biased zones are rendered as translucent volumes so the
+confinement region of each packing is visible at a glance.
 """
 
 import json
@@ -23,6 +26,46 @@ import numpy as np
 from process_bigraph import allocate_core
 from pbg_cellpack.processes import CellPackStep
 from pbg_cellpack.composites import make_packing_document
+
+
+MESH_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'meshes')
+
+
+def load_obj_mesh(path):
+    """Load a triangulated .obj mesh into flat vertex/face arrays.
+
+    Uses trimesh when available (handles quads, normals, etc.) and
+    falls back to a tiny pure-Python parser for simple triangle soups.
+    Returns a dict ready to serialize into the JS payload:
+    ``{'vertices': [x,y,z,...], 'faces': [i,j,k,...], 'bounds': ...}``.
+    """
+    try:
+        import trimesh
+        mesh = trimesh.load(path, force='mesh')
+        verts = np.asarray(mesh.vertices, dtype=np.float32).reshape(-1)
+        faces = np.asarray(mesh.faces, dtype=np.uint32).reshape(-1)
+        bounds = mesh.bounds.tolist()
+    except Exception:
+        vs, fs = [], []
+        with open(path) as fh:
+            for line in fh:
+                if line.startswith('v '):
+                    _, x, y, z = line.split()[:4]
+                    vs.extend([float(x), float(y), float(z)])
+                elif line.startswith('f '):
+                    idx = [int(tok.split('/')[0]) - 1 for tok in line.split()[1:4]]
+                    fs.extend(idx)
+        verts = np.asarray(vs, dtype=np.float32)
+        faces = np.asarray(fs, dtype=np.uint32)
+        pts = verts.reshape(-1, 3)
+        bounds = [pts.min(axis=0).tolist(), pts.max(axis=0).tolist()]
+    return {
+        'vertices': verts.tolist(),
+        'faces': faces.tolist(),
+        'bounds': bounds,
+        'n_vertices': int(len(verts) // 3),
+        'n_faces': int(len(faces) // 3),
+    }
 
 
 # ── Simulation Configs ──────────────────────────────────────────────
@@ -192,6 +235,7 @@ CONFIGS = [
         'seed': 7,
         'camera': [700, 500, 700],
         'color_scheme': 'emerald',
+        'container_ingredients': ['vesicle_shell', 'dense_core'],
     },
 
     # ── 3. Gradient-Biased Organelle Distribution ────────────────
@@ -334,6 +378,100 @@ CONFIGS = [
         'camera': [750, 500, 750],
         'color_scheme': 'rose',
     },
+
+    # ── 5. Membrane-Biased Peroxisome Packing ────────────────────
+    # Adapted from cellPACK's examples/recipes/v2/er_peroxisome.json
+    # (mesoscope/cellpack).  The real recipe uses three triangulated
+    # compartments from a segmented hiPS cell (plasma membrane,
+    # nucleus, and endoplasmic reticulum) and biases peroxisomes by
+    # distance to the ER surface.  We reuse the same bounding box,
+    # peroxisome radius/count, and the three meshes for visualization,
+    # but drive the packing with a lighter-weight radial gradient so
+    # the demo runs in seconds without the mesh-based grid build.
+    {
+        'id': 'membrane',
+        'title': 'Peroxisomes in a Segmented hiPS Cell',
+        'subtitle': 'er_peroxisome recipe — real membrane, nucleus, and ER meshes',
+        'description': (
+            'Adapted from the cellPACK '
+            '<a href="https://github.com/mesoscope/cellpack/blob/main/examples/recipes/v2/er_peroxisome.json" target="_blank">'
+            '<code>er_peroxisome.json</code></a> recipe '
+            '(mesoscope/cellpack).  The canonical recipe packs 121 '
+            'peroxisomes (r&nbsp;=&nbsp;2.37&nbsp;nm) inside a triangulated '
+            'plasma-membrane compartment of a segmented hiPS cell, '
+            'excluding the nucleus and endoplasmic reticulum, and biases '
+            'them by distance to the ER surface.  We reuse the real '
+            'bounding box and the three meshes (membrane / nucleus / ER) '
+            'as the confinement visualization, and drive the packing '
+            'itself with a radial gradient centered on the cell so it '
+            'runs in seconds without the mesh-surface grid build.  '
+            'Green spheres are peroxisomes, gray spheres are smaller '
+            'crowders.  Toggle the compartments in the legend.'
+        ),
+        'config': {
+            'recipe': {
+                'version': '1.0.0',
+                'format_version': '2.1',
+                'name': 'er_peroxisome_sim',
+                'bounding_box': [
+                    [33.775, 35.375, 7.125],
+                    [274.225, 208.625, 106.875],
+                ],
+                'gradients': {
+                    'cell_radial': {
+                        'description': 'Radial, inverted so weight peaks near the plasma membrane',
+                        'mode': 'radial',
+                        'mode_settings': {
+                            'center': [154.0, 122.0, 57.0],
+                            'radius': 130.0,
+                        },
+                        'pick_mode': 'rnd',
+                        'weight_mode': 'linear',
+                        'invert': 'weight',
+                    },
+                },
+                'objects': {
+                    'base': {
+                        'type': 'single_sphere', 'place_method': 'jitter',
+                        'jitter_attempts': 20, 'packing_mode': 'random',
+                        'max_jitter': [1, 1, 1],
+                    },
+                    'peroxisome': {
+                        'type': 'single_sphere', 'inherit': 'base',
+                        'color': [0.12, 0.80, 0.18], 'radius': 2.37,
+                        'packing_mode': 'gradient',
+                        'gradient': ['cell_radial'],
+                        'gradient_weights': [100],
+                    },
+                    'crowder': {
+                        'type': 'single_sphere', 'inherit': 'base',
+                        'color': [0.70, 0.70, 0.74], 'radius': 1.4,
+                    },
+                },
+                'composition': {
+                    'space': {'regions': {
+                        'interior': ['A', 'B'],
+                    }},
+                    'A': {'object': 'peroxisome', 'count': 121},
+                    'B': {'object': 'crowder', 'count': 900},
+                },
+            },
+        },
+        'seed': 31,
+        'camera': [500, 350, 500],
+        'color_scheme': 'teal',
+        # Named meshes to overlay as translucent compartments in the
+        # 3D viewer.  Files live in demo/meshes/ and were downloaded
+        # from cellpack-analysis-data.s3.us-west-2.amazonaws.com.
+        'meshes': [
+            {'id': 'membrane', 'file': 'mem_mesh_370574.obj',
+             'label': 'Plasma membrane', 'color': '#94a3b8', 'opacity': 0.08},
+            {'id': 'nucleus',  'file': 'nuc_mesh_370574.obj',
+             'label': 'Nucleus', 'color': '#6366f1', 'opacity': 0.28},
+            {'id': 'er',       'file': 'struct_mesh_370574.obj',
+             'label': 'Endoplasmic reticulum', 'color': '#f59e0b', 'opacity': 0.35},
+        ],
+    },
 ]
 
 
@@ -450,6 +588,8 @@ COLOR_SCHEMES = {
                 'bg': '#fffbeb', 'accent': '#fbbf24', 'text': '#78350f'},
     'rose':    {'primary': '#f43f5e', 'light': '#ffe4e6', 'dark': '#e11d48',
                 'bg': '#fff1f2', 'accent': '#fb7185', 'text': '#881337'},
+    'teal':    {'primary': '#0d9488', 'light': '#ccfbf1', 'dark': '#0f766e',
+                'bg': '#f0fdfa', 'accent': '#2dd4bf', 'text': '#134e4a'},
 }
 
 
@@ -495,6 +635,42 @@ def generate_html(sim_results, output_path):
             extra['crowd_rec'] = cross_species_dists(
                 result['positions'], result['ingredient_names'],
                 'receptor', 'crowder')
+        elif sid == 'membrane':
+            # Radial distance from the cell center, split by species,
+            # to visualize the membrane bias.
+            center = np.array([(bb[0][i] + bb[1][i]) / 2 for i in range(3)])
+            names = result['ingredient_names']
+            pts = np.array(result['positions'])
+            dists = np.sqrt(np.sum((pts - center) ** 2, axis=1))
+            extra['perox_r'] = [float(dists[i]) for i, n in enumerate(names)
+                                if 'perox' in n.lower()]
+            extra['ribo_r'] = [float(dists[i]) for i, n in enumerate(names)
+                               if 'crowd' in n.lower() or 'ribo' in n.lower()]
+            # Approximate cell radius for the "membrane" annotation on
+            # the chart: half the shorter in-plane box dimension.
+            extra['half_width'] = float(min(
+                bb[1][0] - bb[0][0], bb[1][1] - bb[0][1]) / 2)
+
+        # Confinement-volume descriptor used by the 3D viewer to draw
+        # the region objects are packed into (translucent overlay).
+        confinement = {'kind': 'box'}
+        if sid == 'membrane' and cfg.get('meshes'):
+            mesh_payload = []
+            for entry in cfg['meshes']:
+                path = os.path.join(MESH_DIR, entry['file'])
+                if not os.path.exists(path):
+                    print(f'  missing mesh: {path} — skipping')
+                    continue
+                print(f'  loading mesh {entry["file"]}...')
+                m = load_obj_mesh(path)
+                m.update({
+                    'id': entry['id'], 'label': entry['label'],
+                    'color': entry['color'], 'opacity': entry['opacity'],
+                })
+                mesh_payload.append(m)
+                print(
+                    f'    {m["n_vertices"]} verts / {m["n_faces"]} faces')
+            confinement = {'kind': 'mesh', 'meshes': mesh_payload}
 
         all_js_data[sid] = {
             'positions': result['positions'],
@@ -505,6 +681,8 @@ def generate_html(sim_results, output_path):
             'ingr_counts': ic,
             'ingr_info': {k: v for k, v in ingr_info.items()},
             'nn': nn, 'extra': extra,
+            'container_ingredients': cfg.get('container_ingredients', []),
+            'confinement': confinement,
         }
 
         print(f'  Generating bigraph diagram for {sid}...')
@@ -512,8 +690,24 @@ def generate_html(sim_results, output_path):
         pbg_docs[sid] = make_packing_document(
             recipe=recipe, place_method='jitter', seed=cfg['seed'])
 
-        bb_vol = np.prod(np.array(bb[1]) - np.array(bb[0]))
+        bb_vol = float(np.prod(np.array(bb[1]) - np.array(bb[0])))
         bb_size = [bb[1][i] - bb[0][i] for i in range(3)]
+
+        # Pretty-print the confinement volume: nm^3 up to 10^6, otherwise µm^3.
+        if bb_vol >= 1e9:
+            vol_value = f'{bb_vol / 1e9:.2f}'
+            vol_units = '&micro;m&sup3;'
+        else:
+            vol_value = f'{bb_vol / 1e6:.2f}'
+            vol_units = '10&#8310; nm&sup3;'
+
+        confinement_caption = {
+            'plasma': 'Confinement: cubic bounding box',
+            'vesicle': 'Confinement: vesicle shell (r=400 nm) &middot; dense-core granule (r=80 nm)',
+            'gradient': 'Confinement: cubic bounding box &middot; X/Y gradients',
+            'partner': 'Confinement: cubic bounding box',
+            'membrane': 'Confinement: hiPS-cell mesh &middot; plasma membrane / nucleus / ER (cellPACK er_peroxisome)',
+        }.get(sid, 'Confinement: cubic bounding box')
 
         ingr_summary = ' &middot; '.join(
             f'{name}: <strong>{count}</strong>'
@@ -534,13 +728,14 @@ def generate_html(sim_results, output_path):
         <div class="metric"><span class="metric-label">Species</span><span class="metric-value">{len(ic)}</span></div>
         <div class="metric"><span class="metric-label">Packing &phi;</span><span class="metric-value">{pf:.3f}</span></div>
         <div class="metric"><span class="metric-label">Box</span><span class="metric-value">{bb_size[0]:.0f}&sup3;</span><span class="metric-sub">nm</span></div>
+        <div class="metric"><span class="metric-label">Volume</span><span class="metric-value">{vol_value}</span><span class="metric-sub">{vol_units}</span></div>
         <div class="metric"><span class="metric-label">Runtime</span><span class="metric-value">{runtime:.1f}s</span></div>
       </div>
       <p class="ingr-summary">{ingr_summary}</p>
       <h3 class="subsection-title">3D Molecular Packing</h3>
       <div class="viewer-wrap">
         <canvas id="canvas-{sid}" class="mesh-canvas"></canvas>
-        <div class="viewer-info"><strong>{n_packed}</strong> molecules &middot; <strong>{len(ic)}</strong> species<br>Drag to rotate &middot; Scroll to zoom</div>
+        <div class="viewer-info"><strong>{n_packed}</strong> molecules &middot; <strong>{len(ic)}</strong> species<br>{confinement_caption}<br>Drag to rotate &middot; Scroll to zoom</div>
         <div class="legend-box" id="legend-{sid}"></div>
       </div>
       <h3 class="subsection-title">Analysis</h3>
@@ -615,9 +810,11 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 </style></head><body>
 <div class="page-header">
   <h1>cellPACK Molecular Packing Report</h1>
-  <p>Four canonical mesoscale packing scenarios wrapped as <strong>process-bigraph</strong> Steps using cellPACK.
+  <p>Five canonical mesoscale packing scenarios wrapped as <strong>process-bigraph</strong> Steps using cellPACK.
   Each configuration demonstrates a core capability: multi-species plasma packing, compartment hierarchy
-  with surface/interior regions, gradient-biased organelle placement, and receptor-ligand partner binding.</p>
+  with surface/interior regions, gradient-biased organelle placement, receptor-ligand partner binding,
+  and membrane-biased peroxisome distribution.  Confinement volumes (bounding cubes, vesicle shells,
+  membrane-bias zones) are rendered as translucent overlays in each viewer.</p>
 </div>
 <div class="nav">{nav_items}</div>
 {''.join(sections_html)}
@@ -632,14 +829,49 @@ function toggleJt(id){{const el=document.getElementById(id);if(el.classList.cont
 Object.keys(DOCS).forEach(s=>{{const el=document.getElementById('json-'+s);if(el)el.innerHTML=renderJson(DOCS[s],0)}});
 
 // Legend
-Object.keys(DATA).forEach(s=>{{const d=DATA[s],el=document.getElementById('legend-'+s);if(!el)return;let h='<div style="font-weight:600;margin-bottom:.3rem">Ingredients</div>';Object.keys(d.ingr_info).forEach(n=>{{const info=d.ingr_info[n],c=info.color,r=Math.round(c[0]*255),g=Math.round(c[1]*255),b=Math.round(c[2]*255);h+='<div class="legend-item"><span class="legend-dot" style="background:rgb('+r+','+g+','+b+')"></span><span>'+n+' (r='+info.radius.toFixed(0)+') &times; '+(d.ingr_counts[n]||0)+'</span></div>'}});el.innerHTML=h}});
+Object.keys(DATA).forEach(s=>{{const d=DATA[s],el=document.getElementById('legend-'+s);if(!el)return;let h='<div style="font-weight:600;margin-bottom:.3rem">Ingredients</div>';Object.keys(d.ingr_info).forEach(n=>{{const info=d.ingr_info[n],c=info.color,r=Math.round(c[0]*255),g=Math.round(c[1]*255),b=Math.round(c[2]*255);h+='<div class="legend-item"><span class="legend-dot" style="background:rgb('+r+','+g+','+b+')"></span><span>'+n+' (r='+info.radius.toFixed(1)+') &times; '+(d.ingr_counts[n]||0)+'</span></div>'}});if(d.confinement&&d.confinement.kind==='mesh'&&d.confinement.meshes){{h+='<div style="font-weight:600;margin-top:.5rem;margin-bottom:.25rem">Compartments</div>';d.confinement.meshes.forEach(m=>{{h+='<div class="legend-item"><span class="legend-dot" style="background:'+m.color+';opacity:.85;border:1px solid '+m.color+'"></span><span>'+m.label+' &mdash; '+m.n_faces+' faces</span></div>'}})}}el.innerHTML=h}});
 
 // Three.js
-Object.keys(DATA).forEach(sid=>{{const d=DATA[sid],canvas=document.getElementById('canvas-'+sid),W=canvas.parentElement.clientWidth,H=500;canvas.width=W*devicePixelRatio;canvas.height=H*devicePixelRatio;canvas.style.width=W+'px';canvas.style.height=H+'px';const renderer=new THREE.WebGLRenderer({{canvas,antialias:true}});renderer.setPixelRatio(devicePixelRatio);renderer.setSize(W,H);renderer.setClearColor(0xf1f5f9);const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(45,W/H,0.1,10000);cam.position.set(...d.camera);const ctrl=new THREE.OrbitControls(cam,canvas);ctrl.enableDamping=true;ctrl.dampingFactor=0.08;ctrl.autoRotate=true;ctrl.autoRotateSpeed=0.6;const ctr=[(d.bb[0][0]+d.bb[1][0])/2,(d.bb[0][1]+d.bb[1][1])/2,(d.bb[0][2]+d.bb[1][2])/2];ctrl.target.set(...ctr);scene.add(new THREE.AmbientLight(0xffffff,0.45));const dl1=new THREE.DirectionalLight(0xffffff,0.7);dl1.position.set(500,800,600);scene.add(dl1);const dl2=new THREE.DirectionalLight(0xcbd5e1,0.35);dl2.position.set(-300,-200,-400);scene.add(dl2);
-const bSz=[d.bb[1][0]-d.bb[0][0],d.bb[1][1]-d.bb[0][1],d.bb[1][2]-d.bb[0][2]];const bE=new THREE.EdgesGeometry(new THREE.BoxGeometry(...bSz));const bL=new THREE.LineSegments(bE,new THREE.LineBasicMaterial({{color:0x94a3b8,transparent:true,opacity:0.4}}));bL.position.set(...ctr);scene.add(bL);
-const byR={{}};for(let i=0;i<d.positions.length;i++){{const r=d.radii[i].toFixed(2);if(!byR[r])byR[r]=[];byR[r].push(i)}}
+Object.keys(DATA).forEach(sid=>{{const d=DATA[sid],canvas=document.getElementById('canvas-'+sid),W=canvas.parentElement.clientWidth,H=500;canvas.width=W*devicePixelRatio;canvas.height=H*devicePixelRatio;canvas.style.width=W+'px';canvas.style.height=H+'px';const renderer=new THREE.WebGLRenderer({{canvas,antialias:true,alpha:true}});renderer.setPixelRatio(devicePixelRatio);renderer.setSize(W,H);renderer.setClearColor(0xf1f5f9);const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(45,W/H,0.1,10000);cam.position.set(...d.camera);const ctrl=new THREE.OrbitControls(cam,canvas);ctrl.enableDamping=true;ctrl.dampingFactor=0.08;ctrl.autoRotate=true;ctrl.autoRotateSpeed=0.6;const ctr=[(d.bb[0][0]+d.bb[1][0])/2,(d.bb[0][1]+d.bb[1][1])/2,(d.bb[0][2]+d.bb[1][2])/2];ctrl.target.set(...ctr);scene.add(new THREE.AmbientLight(0xffffff,0.55));const dl1=new THREE.DirectionalLight(0xffffff,0.7);dl1.position.set(500,800,600);scene.add(dl1);const dl2=new THREE.DirectionalLight(0xcbd5e1,0.35);dl2.position.set(-300,-200,-400);scene.add(dl2);
+const bSz=[d.bb[1][0]-d.bb[0][0],d.bb[1][1]-d.bb[0][1],d.bb[1][2]-d.bb[0][2]];
+// Confinement-volume overlay
+const confKind=(d.confinement&&d.confinement.kind)||'box';
+if(confKind==='box'){{
+  const boxFill=new THREE.Mesh(new THREE.BoxGeometry(...bSz),new THREE.MeshBasicMaterial({{color:0x0ea5e9,transparent:true,opacity:0.05,depthWrite:false,side:THREE.BackSide}}));boxFill.position.set(...ctr);scene.add(boxFill);
+  const bE=new THREE.EdgesGeometry(new THREE.BoxGeometry(...bSz));const bL=new THREE.LineSegments(bE,new THREE.LineBasicMaterial({{color:0x64748b,transparent:true,opacity:0.55}}));bL.position.set(...ctr);scene.add(bL);
+}}
+if(confKind==='mesh'){{
+  // Render each named compartment (plasma membrane, nucleus, ER) as a
+  // translucent surface mesh from the cellPACK er_peroxisome recipe.
+  const meshes=(d.confinement.meshes)||[];
+  meshes.forEach(m=>{{
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(m.vertices),3));
+    g.setIndex(new THREE.BufferAttribute(new Uint32Array(m.faces),1));
+    g.computeVertexNormals();
+    const col=new THREE.Color(m.color);
+    const fill=new THREE.Mesh(g,new THREE.MeshPhongMaterial({{color:col,transparent:true,opacity:m.opacity,depthWrite:false,side:THREE.DoubleSide,shininess:20}}));
+    fill.renderOrder=2;scene.add(fill);
+    // faint silhouette lines so the mesh is legible through the fill
+    const wire=new THREE.LineSegments(new THREE.EdgesGeometry(g,25),new THREE.LineBasicMaterial({{color:col,transparent:true,opacity:Math.min(0.55,m.opacity*2.0),linewidth:1}}));
+    wire.renderOrder=3;scene.add(wire);
+  }});
+  const bE=new THREE.EdgesGeometry(new THREE.BoxGeometry(...bSz));
+  const bL=new THREE.LineSegments(bE,new THREE.LineBasicMaterial({{color:0x94a3b8,transparent:true,opacity:0.25}}));
+  bL.position.set(...ctr);scene.add(bL);
+}}
+// Group packed positions by (ingredient-name, radius). Container
+// ingredients (e.g. vesicle_shell, dense_core) render as translucent
+// shells so the packed interior is visible.
+const containers=new Set(d.container_ingredients||[]);
+const groups={{}};
+for(let i=0;i<d.positions.length;i++){{const nm=d.names?d.names[i]:'';const key=(containers.has(nm)?'C:':'N:')+d.radii[i].toFixed(2);if(!groups[key])groups[key]={{isContainer:containers.has(nm),radius:d.radii[i],indices:[]}};groups[key].indices.push(i)}}
 const dm=new THREE.Object3D(),tc=new THREE.Color();
-Object.keys(byR).forEach(rk=>{{const r=parseFloat(rk),idx=byR[rk],sg=new THREE.SphereGeometry(r,16,12),mt=new THREE.MeshPhongMaterial({{shininess:60,specular:0x444444}}),im=new THREE.InstancedMesh(sg,mt,idx.length);for(let j=0;j<idx.length;j++){{const i=idx[j];dm.position.set(d.positions[i][0],d.positions[i][1],d.positions[i][2]);dm.updateMatrix();im.setMatrixAt(j,dm.matrix);tc.setRGB(d.colors[i][0],d.colors[i][1],d.colors[i][2]);im.setColorAt(j,tc)}}im.instanceMatrix.needsUpdate=true;if(im.instanceColor)im.instanceColor.needsUpdate=true;scene.add(im)}});
+Object.keys(groups).forEach(k=>{{const g=groups[k],r=g.radius,idx=g.indices,sg=new THREE.SphereGeometry(r,g.isContainer?32:16,g.isContainer?24:12);const mt=g.isContainer?new THREE.MeshPhongMaterial({{shininess:30,specular:0x222222,transparent:true,opacity:0.18,depthWrite:false,side:THREE.DoubleSide}}):new THREE.MeshPhongMaterial({{shininess:60,specular:0x444444}});const im=new THREE.InstancedMesh(sg,mt,idx.length);im.renderOrder=g.isContainer?1:0;for(let j=0;j<idx.length;j++){{const i=idx[j];dm.position.set(d.positions[i][0],d.positions[i][1],d.positions[i][2]);dm.updateMatrix();im.setMatrixAt(j,dm.matrix);tc.setRGB(d.colors[i][0],d.colors[i][1],d.colors[i][2]);im.setColorAt(j,tc)}}im.instanceMatrix.needsUpdate=true;if(im.instanceColor)im.instanceColor.needsUpdate=true;scene.add(im);
+  // Draw a thin wireframe over container shells so the confinement
+  // boundary stays visible through the translucent fill.
+  if(g.isContainer){{const wg=new THREE.SphereGeometry(r,28,18);const wm=new THREE.MeshBasicMaterial({{color:0x1e293b,wireframe:true,transparent:true,opacity:0.12}});const wim=new THREE.InstancedMesh(wg,wm,idx.length);for(let j=0;j<idx.length;j++){{const i=idx[j];dm.position.set(d.positions[i][0],d.positions[i][1],d.positions[i][2]);dm.updateMatrix();wim.setMatrixAt(j,dm.matrix)}}wim.instanceMatrix.needsUpdate=true;scene.add(wim)}}
+}});
 (function a(){{requestAnimationFrame(a);ctrl.update();renderer.render(scene,cam)}})()}});
 
 // Plotly
@@ -686,6 +918,16 @@ Plotly.newPlot('chart-a-partner',[
 barChart('chart-b-partner',d);
 nnChart('chart-c-partner',d.nn);
 pieChart('chart-d-partner',d)}})();
+
+// ── Membrane-biased peroxisomes ──
+(function(){{const d=DATA.membrane;if(!d)return;
+Plotly.newPlot('chart-a-membrane',[
+{{x:d.extra.perox_r,type:'histogram',nbinsx:28,name:'Peroxisomes',marker:{{color:'rgba(51,184,26,0.65)',line:{{width:.5,color:'#15803d'}}}},opacity:.8}},
+{{x:d.extra.ribo_r,type:'histogram',nbinsx:28,name:'Ribosomes',marker:{{color:'rgba(100,116,139,0.45)',line:{{width:.5,color:'#64748b'}}}},opacity:.7}},
+],{{...pL,barmode:'overlay',title:{{text:'Distance from Cell Center (radial bias)',font:{{size:12,color:'#334155'}}}},xaxis:{{...pL.xaxis,title:{{text:'Radial distance (nm)',font:{{size:10}}}}}},yaxis:{{...pL.yaxis,title:{{text:'Count',font:{{size:10}}}}}},legend:{{font:{{size:9}},bgcolor:'rgba(0,0,0,0)',x:.05,y:.95}},shapes:[{{type:'line',x0:d.extra.half_width,x1:d.extra.half_width,yref:'paper',y0:0,y1:1,line:{{color:'#0d9488',width:1.5,dash:'dash'}}}}],annotations:[{{x:d.extra.half_width,yref:'paper',y:1,text:'membrane',showarrow:false,xanchor:'right',font:{{size:9,color:'#0d9488'}}}}]}},pC);
+barChart('chart-b-membrane',d);
+nnChart('chart-c-membrane',d.nn);
+pieChart('chart-d-membrane',d)}})();
 </script></body></html>"""
 
     with open(output_path, 'w') as f:

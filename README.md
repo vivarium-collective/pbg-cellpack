@@ -2,6 +2,8 @@
 
 Process-bigraph wrapper for [cellPACK](https://github.com/mesoscope/cellpack), a mesoscale molecular packing tool that assembles computational models of biological environments by packing molecules according to recipes.
 
+**[View Interactive Demo Report](https://vivarium-collective.github.io/pbg-cellpack/)** — blood plasma, synaptic vesicles, gradient-biased organelles, and receptor–ligand assembly with Three.js 3D sphere viewers, Plotly charts, and bigraph architecture diagrams.
+
 ## Installation
 
 ```bash
