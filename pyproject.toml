@@ -11,9 +11,14 @@ license = "MIT"
 dependencies = [
     "process-bigraph>=0.0.10",
     "bigraph-schema",
+    "pbg-superpowers",
     "cellpack",
     "numpy",
+    "pyyaml",
 ]
+
+[tool.uv.sources]
+pbg-superpowers = { git = "https://github.com/vivarium-collective/pbg-superpowers.git", branch = "main" }
 
 [tool.setuptools.packages.find]
 include = ["pbg_cellpack*"]
