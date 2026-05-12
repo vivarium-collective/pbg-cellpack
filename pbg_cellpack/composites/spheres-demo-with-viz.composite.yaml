@@ -1,5 +1,6 @@
 name: spheres-demo-with-viz
 description: "cellPACK spheres demo with a wired Visualization Step. The packer emits per-update positions/radii/colors; PackingPlots renders an interactive Plotly figure (2D projection + ingredient bar chart) to the 'viz_html' store on every update."
+tags: [packing, geometry, mesoscale, demo, visualization]
 
 requires:
   processes: [CellPackStep, PackingPlots, RAMEmitter]

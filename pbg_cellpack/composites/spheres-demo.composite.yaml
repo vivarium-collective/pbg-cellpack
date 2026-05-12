@@ -1,5 +1,6 @@
 name: spheres-demo
 description: "Minimal cellPACK packing demo: 8 single-sphere ingredients jittered into a 300 nm cube. Emits the packed sphere count and packing fraction."
+tags: [packing, geometry, mesoscale, demo]
 
 requires:
   processes: [CellPackStep, RAMEmitter]
